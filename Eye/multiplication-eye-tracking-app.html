@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>視線追跡 掛け算学習補助</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/webgazer/3.0.0/webgazer.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5ff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #4a4a9c;
+            text-align: center;
+        }
+        .setup-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .problem-container {
+            text-align: center;
+            font-size: 24px;
+            margin: 20px 0;
+            padding: 20px;
+            background: #e9e9ff;
+            border-radius: 10px;
+            display: flex;
+            justify-content: center;
+        }
+        .multiplication-problem {
+            display: inline-block;
+            position: relative;
+            text-align: right;
+        }
+        .number {
+            margin: 0 15px;
+            font-size: 48px;
+            padding: 10px;
+            border-radius: 5px;
+            display: inline-block;
+            width: 60px;
+            text-align: center;
+            position: relative;
+        }
+        .number:hover {
+            background-color: #f0f0ff;
+        }
+        .operation {
+            font-size: 48px;
+            margin: 0 10px;
+        }
+        .hint-container {
+            margin-top: 30px;
+            padding: 15px;
+            background: #f8f8ff;
+            border-radius: 10px;
+            border-left: 5px solid #7878d2;
+        }
+        .times-table {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            padding: 15px;
+            background: #e8e8ff;
+            border-radius: 8px;
+        }
+        .times-item {
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            box-shadow: 0 2px 3px rgba(0, 0, 0, 0.1);
+        }
+        .calibration-points {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1000;
+        }
+        .point {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        .calibration-container {
+            text-align: center;
+            margin: 20px 0;
+        }
+        button {
+            background: #5c5cb8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #4a4a9c;
+        }
+        .status {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #f0f0ff;
+            text-align: center;
+        }
+        #gazeDot {
+            position: fixed;
+            width: 10px;
+            height: 10px;
+            background: red;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 1000;
+            opacity: 0.7;
+        }
+        #video-container {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border: 3px solid #5c5cb8;
+            border-radius: 5px;
+            overflow: hidden;
+            z-index: 1000;
+        }
+        #webgazerVideoFeed {
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>視線追跡による掛け算学習補助</h1>
+        
+        <div id="setup-container" class="setup-container">
+            <p>このアプリは、あなたの視線を追跡して掛け算の学習をサポートします。</p>
+            <p>まず、カメラへのアクセスを許可し、キャリブレーションを行ってください。</p>
+            <button id="start-button">開始する</button>
+        </div>
+        
+        <div id="calibration-container" class="calibration-container hidden">
+            <p>画面上の赤い点を順番に見てクリックしてください。</p>
+            <div class="status" id="calibration-status">キャリブレーション準備中...</div>
+            <button id="skip-calibration">キャリブレーションをスキップ</button>
+        </div>
+        
+        <div id="app-container" class="hidden">
+            <div class="status" id="status">視線追跡システム: 準備完了</div>
+            
+            <div class="problem-container">
+                <div class="multiplication-problem">
+                    <div class="number" id="num1">24</div>
+                    <div class="operation">×</div>
+                    <div class="number" id="num2">35</div>
+                    <div class="operation">=</div>
+                    <div class="number" id="result">?</div>
+                </div>
+            </div>
+            
+            <div class="hint-container">
+                <h3>ヒント</h3>
+                <p id="hint-text">数字を見つめると、その数字の九九表が表示されます。</p>
+                <div id="times-table" class="times-table hidden"></div>
+            </div>
+            
+            <div class="controls">
+                <button id="new-problem">新しい問題</button>
+                <button id="show-answer">答えを見る</button>
+                <button id="restart">再キャリブレーション</button>
+            </div>
+        </div>
+    </div>
+    
+    <div id="gazeDot"></div>
+    <div id="video-container" class="hidden">
+        <video id="webgazerVideoFeed" autoplay></video>
+    </div>
+    
+    <script>
+        // DOM要素
+        const startButton = document.getElementById('start-button');
+        const skipCalibrationButton = document.getElementById('skip-calibration');
+        const setupContainer = document.getElementById('setup-container');
+        const calibrationContainer = document.getElementById('calibration-container');
+        const appContainer = document.getElementById('app-container');
+        const statusElement = document.getElementById('status');
+        const calibrationStatus = document.getElementById('calibration-status');
+        const num1Element = document.getElementById('num1');
+        const num2Element = document.getElementById('num2');
+        const resultElement = document.getElementById('result');
+        const hintText = document.getElementById('hint-text');
+        const timesTable = document.getElementById('times-table');
+        const newProblemButton = document.getElementById('new-problem');
+        const showAnswerButton = document.getElementById('show-answer');
+        const restartButton = document.getElementById('restart');
+        const gazeDot = document.getElementById('gazeDot');
+        const videoContainer = document.getElementById('video-container');
+        
+        // 現在の問題と答え
+        let currentProblem = {
+            num1: 24,
+            num2: 35,
+            result: 24 * 35
+        };
+        
+        // 注視中の要素
+        let currentGazeElement = null;
+        let lastGazeTime = 0;
+        const gazeThreshold = 1000; // ミリ秒
+        
+        // 新しい問題を生成
+        function generateNewProblem() {
+            const num1 = Math.floor(Math.random() * 90) + 10; // 10～99の乱数
+            const num2 = Math.floor(Math.random() * 90) + 10; // 10～99の乱数
+            
+            currentProblem = {
+                num1: num1,
+                num2: num2,
+                result: num1 * num2
+            };
+            
+            num1Element.textContent = num1;
+            num2Element.textContent = num2;
+            resultElement.textContent = "?";
+            
+            timesTable.classList.add('hidden');
+            hintText.textContent = "数字を見つめると、その数字の九九表が表示されます。";
+        }
+        
+        // 答えを表示
+        function showAnswer() {
+            resultElement.textContent = currentProblem.result;
+        }
+        
+        // 九九表を生成
+        function generateTimesTable(number) {
+            timesTable.innerHTML = '';
+            const singleDigit = number > 9 ? parseInt(number.toString().charAt(number.toString().length - 1)) : number;
+            
+            for (let i = 1; i <= 9; i++) {
+                const item = document.createElement('div');
+                item.className = 'times-item';
+                item.textContent = `${singleDigit} × ${i} = ${singleDigit * i}`;
+                timesTable.appendChild(item);
+            }
+            
+            timesTable.classList.remove('hidden');
+            hintText.textContent = `${singleDigit}の九九表を表示しています。`;
+        }
+        
+        // 視線に基づいて要素をチェック
+        function checkGazeOnElements(x, y) {
+            // 数字要素をチェック
+            const elements = [num1Element, num2Element];
+            let gazedElement = null;
+            
+            elements.forEach(element => {
+                const rect = element.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    gazedElement = element;
+                }
+            });
+            
+            const now = Date.now();
+            
+            // 要素が変わったか、何も見ていない場合はリセット
+            if (gazedElement !== currentGazeElement) {
+                currentGazeElement = gazedElement;
+                lastGazeTime = now;
+            } else if (currentGazeElement !== null && now - lastGazeTime > gazeThreshold) {
+                // 閾値を超えて同じ要素を見ている場合、九九表を表示
+                const number = parseInt(currentGazeElement.textContent);
+                generateTimesTable(number);
+                
+                // 一度表示したらリセット
+                lastGazeTime = now;
+            }
+        }
+        
+        // WebGazerの初期化
+        function initWebGazer() {
+            webgazer.setGazeListener((data, timestamp) => {
+                if (data === null) return;
+                
+                // 視線位置にドットを表示
+                const x = data.x;
+                const y = data.y;
+                gazeDot.style.left = x + 'px';
+                gazeDot.style.top = y + 'px';
+                
+                // アプリが表示されている場合のみ処理
+                if (!appContainer.classList.contains('hidden')) {
+                    checkGazeOnElements(x, y);
+                }
+            }).begin();
+            
+            webgazer.showVideoPreview(true)
+                .showPredictionPoints(false)
+                .applyKalmanFilter(true);
+                
+            window.saveDataAcrossSessions = true;
+        }
+        
+        // キャリブレーションポイントの作成
+        function setupCalibrationPoints() {
+            const points = [
+                { x: '10%', y: '10%' },
+                { x: '90%', y: '10%' },
+                { x: '50%', y: '50%' },
+                { x: '10%', y: '90%' },
+                { x: '90%', y: '90%' }
+            ];
+            
+            const calibrationPoints = document.createElement('div');
+            calibrationPoints.className = 'calibration-points';
+            
+            points.forEach((point, index) => {
+                const pointElement = document.createElement('div');
+                pointElement.className = 'point';
+                pointElement.style.left = point.x;
+                pointElement.style.top = point.y;
+                pointElement.dataset.index = index;
+                
+                pointElement.addEventListener('click', () => {
+                    pointElement.style.backgroundColor = 'green';
+                    const remainingPoints = document.querySelectorAll('.point:not([style*="background-color: green"])').length;
+                    
+                    if (remainingPoints === 0) {
+                        completeCalibration();
+                    } else {
+                        calibrationStatus.textContent = `あと${remainingPoints}点をクリックしてください`;
+                    }
+                });
+                
+                calibrationPoints.appendChild(pointElement);
+            });
+            
+            document.body.appendChild(calibrationPoints);
+            
+            return calibrationPoints;
+        }
+        
+        // キャリブレーション完了
+        function completeCalibration() {
+            const calibrationPoints = document.querySelector('.calibration-points');
+            if (calibrationPoints) calibrationPoints.remove();
+            
+            calibrationContainer.classList.add('hidden');
+            appContainer.classList.remove('hidden');
+            videoContainer.classList.remove('hidden');
+            
+            statusElement.textContent = '視線追跡システム: 動作中';
+            generateNewProblem();
+        }
+        
+        // イベントリスナー
+        startButton.addEventListener('click', () => {
+            setupContainer.classList.add('hidden');
+            initWebGazer();
+            
+            setTimeout(() => {
+                calibrationContainer.classList.remove('hidden');
+                const calibrationPoints = setupCalibrationPoints();
+                calibrationStatus.textContent = 'すべての赤い点をクリックしてください';
+            }, 2000);
+        });
+        
+        skipCalibrationButton.addEventListener('click', () => {
+            completeCalibration();
+        });
+        
+        newProblemButton.addEventListener('click', generateNewProblem);
+        showAnswerButton.addEventListener('click', showAnswer);
+        
+        restartButton.addEventListener('click', () => {
+            webgazer.clearData();
+            location.reload();
+        });
+        
+        // ページ離脱時
+        window.addEventListener('beforeunload', () => {
+            webgazer.end();
+        });
+    </script>
+</div>
